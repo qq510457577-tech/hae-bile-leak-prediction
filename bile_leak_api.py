@@ -10,6 +10,8 @@ import json
 import uuid
 import logging
 import re
+import zipfile
+import io
 from pathlib import Path
 from datetime import datetime
 
@@ -18,6 +20,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import numpy as np
+import pymysql.cursors as pymysql_cursors
 
 # ── 视觉大模型: Gemini ──
 try:
@@ -1045,18 +1048,39 @@ async def list_examinations(
     date_from: str = "",
     date_to: str = "",
     diameter_gt_12cm: str = "",
+    large_resection: str = "",
     status: str = "",
+    confidence: str = "",
+    institution: str = "",
+    modality: str = "",
+    has_pixel_spacing: str = "",
+    keyword: str = "",
 ):
-    """查询检查列表"""
+    """查询检查列表（增强版）"""
     filters = {}
     if patient_name: filters["patient_name"] = patient_name
     if patient_id: filters["patient_id"] = patient_id
     if date_from: filters["date_from"] = date_from
     if date_to: filters["date_to"] = date_to
     if diameter_gt_12cm: filters["diameter_gt_12cm"] = True
+    if large_resection: filters["large_resection"] = True
     if status: filters["status"] = status
+    if confidence: filters["confidence"] = confidence
+    if institution: filters["institution"] = institution
+    if modality: filters["modality"] = modality
+    if has_pixel_spacing: filters["has_pixel_spacing"] = True
+    if keyword: filters["keyword"] = keyword
 
     exams = hae_db.list_examinations(filters)
+    return {"success": True, "examinations": exams, "total": len(exams)}
+
+
+@app.get("/api/bile-leak/patients/{patient_id}/history")
+async def get_patient_history(patient_id: int):
+    """获取患者历史检查记录，用于对比"""
+    exams = hae_db.get_patient_history(patient_id)
+    if not exams:
+        raise HTTPException(status_code=404, detail="该患者无检查记录")
     return {"success": True, "examinations": exams, "total": len(exams)}
 
 
@@ -1074,7 +1098,7 @@ async def get_slice_image(exam_id: int, slice_id: int):
     """获取切片图像"""
     conn = hae_db.get_conn()
     try:
-        with conn.cursor() as cur:
+        with conn.cursor(pymysql_cursors.DictCursor) as cur:
             cur.execute(
                 "SELECT image_path FROM hae_selected_slices WHERE examination_id=%s AND id=%s",
                 (exam_id, slice_id)
@@ -1100,7 +1124,7 @@ async def get_dicom_preview(exam_id: int, slice_id: int):
 
     conn = hae_db.get_conn()
     try:
-        with conn.cursor() as cur:
+        with conn.cursor(pymysql_cursors.DictCursor) as cur:
             cur.execute(
                 "SELECT dicom_path FROM hae_selected_slices WHERE examination_id=%s AND id=%s",
                 (exam_id, slice_id)
@@ -1146,12 +1170,65 @@ async def get_dicom_preview(exam_id: int, slice_id: int):
         conn.close()
 
 
+@app.get("/api/bile-leak/dicom-zip/{exam_id}")
+async def download_dicom_zip(exam_id: int):
+    """打包下载指定检查的所有精选层面原始DICOM文件"""
+    conn = hae_db.get_conn()
+    try:
+        with conn.cursor(pymysql_cursors.DictCursor) as cur:
+            cur.execute(
+                "SELECT id, slice_index, dicom_path FROM hae_selected_slices "
+                "WHERE examination_id=%s AND dicom_path IS NOT NULL AND dicom_path!='' "
+                "ORDER BY slice_index",
+                (exam_id,)
+            )
+            slices = cur.fetchall()
+            if not slices:
+                raise HTTPException(status_code=404, detail="没有可下载的DICOM文件")
+
+        # 获取检查信息做文件名
+        conn2 = hae_db.get_conn()
+        try:
+            with conn2.cursor(pymysql_cursors.DictCursor) as cur2:
+                cur2.execute(
+                    "SELECT e.id, p.patient_name, e.exam_date FROM hae_examinations e "
+                    "JOIN hae_patients p ON e.patient_id=p.id WHERE e.id=%s", (exam_id,)
+                )
+                exam = cur2.fetchone()
+        finally:
+            conn2.close()
+
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for s in slices:
+                dicom_path = s["dicom_path"]
+                p = Path(dicom_path)
+                if not p.exists():
+                    log.warning(f"DICOM文件缺失: {dicom_path}")
+                    continue
+                arcname = f"slice_{s['slice_index']:04d}.dcm"
+                zf.write(str(p), arcname)
+
+        zip_buf.seek(0)
+        exam_date = exam["exam_date"] if exam else "unknown"
+        pat_name = exam["patient_name"] if exam else "unknown"
+        filename = f"HAE_{exam_id}_{exam_date}_slices.zip"
+        from fastapi.responses import Response
+        return Response(
+            content=zip_buf.getvalue(),
+            media_type="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
+    finally:
+        conn.close()
+
+
 @app.get("/api/bile-leak/dicom-raw/{exam_id}/{slice_id}")
 async def get_raw_dicom(exam_id: int, slice_id: int):
     """下载原始DICOM文件"""
     conn = hae_db.get_conn()
     try:
-        with conn.cursor() as cur:
+        with conn.cursor(pymysql_cursors.DictCursor) as cur:
             cur.execute(
                 "SELECT dicom_path, slice_index FROM hae_selected_slices WHERE examination_id=%s AND id=%s",
                 (exam_id, slice_id)

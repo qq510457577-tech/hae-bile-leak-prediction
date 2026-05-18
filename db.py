@@ -173,13 +173,37 @@ def list_examinations(filters: dict = None) -> list:
                     where_clauses.append(
                         "JSON_EXTRACT(e.analysis_json, '$.diameter_gt_12cm') = '\"是\"'"
                     )
+                if filters.get("large_resection"):
+                    where_clauses.append(
+                        "JSON_EXTRACT(e.analysis_json, '$.large_resection') = '\"是\"'"
+                    )
                 if filters.get("status"):
                     where_clauses.append("e.status = %s")
                     params.append(filters["status"])
+                if filters.get("confidence"):
+                    where_clauses.append(
+                        "JSON_EXTRACT(e.analysis_json, '$.confidence') = %s"
+                    )
+                    params.append(f'"{filters["confidence"]}"')
+                if filters.get("institution"):
+                    where_clauses.append("e.institution LIKE %s")
+                    params.append(f'%{filters["institution"]}%')
+                if filters.get("modality"):
+                    where_clauses.append("e.modality = %s")
+                    params.append(filters["modality"])
+                if filters.get("has_pixel_spacing"):
+                    where_clauses.append("e.pixel_spacing != ''")
+                if filters.get("keyword"):
+                    where_clauses.append(
+                        "(p.patient_name LIKE %s OR e.series_description LIKE %s OR JSON_EXTRACT(e.analysis_json, '$.additional_findings') LIKE %s)"
+                    )
+                    kw = f'%{filters["keyword"]}%'
+                    params.extend([kw, kw, kw])
 
             sql = f"""SELECT e.id, e.upload_date, e.exam_date, e.series_description,
                             e.modality, e.total_dicom_slices, e.selected_slice_count,
-                            e.status, e.pixel_spacing,
+                            e.status, e.pixel_spacing, e.institution,
+                            e.preop_dbil, e.preop_ldh,
                             p.patient_name, p.patient_id, p.patient_birth_date, p.patient_sex,
                             e.analysis_json
                       FROM hae_examinations e
@@ -201,6 +225,47 @@ def list_examinations(filters: dict = None) -> list:
                 result.append(d)
             return result
 
+    finally:
+        conn.close()
+
+
+def get_patient_history(patient_id: int) -> list:
+    """获取同一患者的所有检查记录（含简要分析摘要），用于历史对比"""
+    conn = get_conn()
+    try:
+        with conn.cursor(DictCursor) as cur:
+            cur.execute(
+                """SELECT e.id, e.upload_date, e.exam_date, e.series_description,
+                          e.modality, e.institution, e.total_dicom_slices,
+                          e.selected_slice_count, e.pixel_spacing, e.status,
+                          e.analysis_json,
+                          p.patient_name, p.patient_id, p.patient_birth_date, p.patient_sex
+                   FROM hae_examinations e
+                   JOIN hae_patients p ON e.patient_id = p.id
+                   WHERE e.patient_id = %s
+                   ORDER BY e.exam_date ASC""",
+                (patient_id,)
+            )
+            rows = cur.fetchall()
+            result = []
+            for r in rows:
+                d = dict(r)
+                try:
+                    d["analysis"] = json.loads(d["analysis_json"]) if d["analysis_json"] else {}
+                except:
+                    d["analysis"] = {}
+                del d["analysis_json"]
+
+                # 每个检查附带切片预览（第一张）
+                cur.execute(
+                    "SELECT id, slice_index, slice_location, reason, image_path, dicom_path FROM hae_selected_slices WHERE examination_id=%s ORDER BY slice_index LIMIT 1",
+                    (d["id"],)
+                )
+                slice_row = cur.fetchone()
+                d["preview_slice"] = dict(slice_row) if slice_row else None
+
+                result.append(d)
+            return result
     finally:
         conn.close()
 

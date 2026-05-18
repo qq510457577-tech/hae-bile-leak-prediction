@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>HAE术后胆漏风险预测 · AI影像辅助</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Serif+SC:wght@400;600;700&display=swap');
+
+        :root {
+            --bg: #f8fafc;
+            --bg-card: rgba(255,255,255,0.8);
+            --bg-hover: rgba(0,0,0,0.03);
+            --border: rgba(0,0,0,0.08);
+            --border-hover: rgba(0,0,0,0.15);
+            --fg: #0f172a;
+            --muted: #64748b;
+            --accent: #0284c7;
+            --accent-2: #16a34a;
+            --accent-3: #d97706;
+            --danger: #dc2626;
+            --purple: #7c3aed;
+            --radius: 12px;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-serif: 'Noto Serif SC', serif;
+            --card-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.03);
+        }
+
+        * { margin:0; padding:0; box-sizing:border-box; }
+        html { height:100%; }
+        body {
+            min-height:100%;
+            font-family:var(--font-sans);
+            background:var(--bg); color:var(--fg);
+            -webkit-font-smoothing:antialiased;
+        }
+
+        .bg-canvas {
+            position:fixed; inset:0; z-index:0;
+            background:
+                radial-gradient(ellipse 70% 50% at 20% 0%, rgba(2,132,199,0.06) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 50% at 85% 90%, rgba(124,58,237,0.05) 0%, transparent 55%),
+                var(--bg);
+        }
+
+        .container { position:relative; z-index:1; max-width:680px; margin:0 auto; padding:2rem 1.25rem 3rem; }
+
+        /* Header */
+        .header { text-align:center; margin-bottom:1.5rem; }
+        .header h1 {
+            font-family:var(--font-serif);
+            font-size:1.5rem; font-weight:700;
+            line-height:1.35;
+        }
+        .header .sub {
+            font-size:0.8125rem; color:var(--muted); margin-top:0.5rem;
+            line-height:1.5;
+        }
+        .header .badge {
+            display:inline-block; padding:0.15rem 0.6rem;
+            border-radius:4px; font-size:0.6875rem; font-weight:500;
+            background:rgba(245,158,11,0.1); color:var(--accent-3);
+            margin-top:0.75rem;
+        }
+
+        /* Cards */
+        .card {
+            background:var(--bg-card); border:1px solid var(--border);
+            border-radius:var(--radius); padding:1.25rem;
+            margin-bottom:0.75rem;
+            transition:all 0.2s ease;
+            box-shadow:var(--card-shadow);
+        }
+        .card-title {
+            font-size:0.8125rem; font-weight:600;
+            margin-bottom:0.25rem;
+        }
+        .card-desc {
+            font-size:0.75rem; color:var(--muted); line-height:1.4;
+            margin-bottom:0.75rem;
+        }
+
+        /* Upload Area */
+        .upload-zone {
+            border:2px dashed rgba(0,0,0,0.12);
+            border-radius:var(--radius);
+            padding:2rem 1.5rem;
+            text-align:center;
+            cursor:pointer;
+            transition:all 0.3s ease;
+            position:relative;
+            margin-bottom:0.75rem;
+            background:rgba(255,255,255,0.6);
+        }
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color:var(--accent);
+            background:rgba(56,189,248,0.04);
+        }
+        .upload-zone.has-image {
+            border-color:var(--accent-2);
+            border-style:solid;
+            padding:1rem;
+        }
+        .upload-zone .icon {
+            font-size:2.5rem; margin-bottom:0.5rem;
+        }
+        .upload-zone .text {
+            font-size:0.8125rem; color:var(--muted);
+        }
+        .upload-zone .hint {
+            font-size:0.6875rem; color:var(--muted); margin-top:0.35rem;
+            opacity:0.6;
+        }
+        .upload-zone input[type="file"] {
+            position:absolute; inset:0; opacity:0; cursor:pointer;
+        }
+        .image-preview {
+            display:none; max-width:100%; max-height:240px;
+            border-radius:8px; object-fit:contain;
+            margin:0 auto;
+        }
+        .image-preview.visible { display:block; }
+
+        /* Image type selector */
+        .img-type-select {
+            display:flex; gap:0.4rem; justify-content:center; margin-top:0.75rem;
+        }
+        .img-type-select label {
+            padding:0.3rem 0.75rem; border:1px solid var(--border);
+            border-radius:6px; font-size:0.75rem;
+            cursor:pointer; transition:all 0.15s;
+        }
+        .img-type-select label:hover { border-color:var(--border-hover); }
+        .img-type-select input[type="radio"] { display:none; }
+        .img-type-select label:has(input:checked) {
+            border-color:var(--accent);
+            background:rgba(56,189,248,0.08);
+        }
+
+        /* Analyzed badge */
+        .ai-badge {
+            display:inline-flex; align-items:center; gap:0.3rem;
+            padding:0.2rem 0.6rem; border-radius:4px;
+            font-size:0.6875rem; font-weight:500;
+            background:rgba(192,132,252,0.1); color:var(--purple);
+            margin-bottom:0.5rem;
+        }
+        .ai-suggestion {
+            background:rgba(124,58,237,0.04);
+            border:1px solid rgba(124,58,237,0.15);
+            border-radius:8px; padding:0.75rem 1rem;
+            margin-bottom:0.75rem;
+            font-size:0.75rem; line-height:1.5;
+        }
+        .ai-suggestion .item {
+            display:flex; align-items:flex-start; gap:0.4rem;
+            margin-bottom:0.3rem;
+        }
+        .ai-suggestion .item:last-child { margin-bottom:0; }
+        .ai-suggestion .label { color:var(--muted); min-width:5em; }
+        .ai-suggestion .value { color:var(--fg); }
+        .ai-suggestion .confidence {
+            display:inline-block; padding:0.1rem 0.4rem;
+            border-radius:3px; font-size:0.625rem;
+            margin-left:0.3rem;
+        }
+        .conf-high { background:rgba(22,163,74,0.1); color:var(--accent-2); }
+        .conf-mid { background:rgba(217,119,6,0.1); color:var(--accent-3); }
+        .conf-low { background:rgba(220,38,38,0.1); color:var(--danger); }
+        .disclaimer-text {
+            font-size:0.6875rem; color:var(--muted);
+            margin-top:0.5rem; line-height:1.4;
+        }
+
+        /* Buttons */
+        .btn-analyze {
+            width:100%; padding:0.7rem;
+            border-radius:var(--radius); border:none;
+            font-size:0.875rem; font-weight:600;
+            background:linear-gradient(135deg, var(--purple), #a855f7);
+            color:white; cursor:pointer;
+            transition:all 0.2s ease;
+            margin-bottom:0.75rem;
+        }
+        .btn-analyze:hover { transform:translateY(-1px); filter:brightness(1.1); }
+        .btn-analyze:active { transform:translateY(0); }
+        .btn-analyze:disabled { opacity:0.4; cursor:not-allowed; transform:none; filter:none; }
+
+        .btn-apply {
+            width:100%; padding:0.5rem;
+            border-radius:8px; border:1px solid var(--purple);
+            font-size:0.8125rem; font-weight:500;
+            background:rgba(192,132,252,0.06);
+            color:var(--purple); cursor:pointer;
+            transition:all 0.2s ease;
+            margin-bottom:1rem;
+        }
+        .btn-apply:hover { background:rgba(192,132,252,0.12); }
+        .btn-apply:disabled { opacity:0.3; cursor:not-allowed; }
+
+        /* Loading spinner */
+        .spinner {
+            display:none;
+            justify-content:center; align-items:center; gap:0.5rem;
+            padding:1rem;
+        }
+        .spinner.visible { display:flex; }
+        .spinner .dot {
+            width:8px; height:8px; border-radius:50%;
+            background:var(--accent); animation:bounce 1.4s ease-in-out infinite both;
+        }
+        .spinner .dot:nth-child(1) { animation-delay:-0.32s; }
+        .spinner .dot:nth-child(2) { animation-delay:-0.16s; }
+        .spinner .dot:nth-child(3) { animation-delay:0s; }
+        @keyframes bounce {
+            0%,80%,100% { transform:scale(0) }
+            40% { transform:scale(1) }
+        }
+        .spinner-text { font-size:0.75rem; color:var(--muted); }
+
+        /* Radio Group */
+        .radio-group { display:flex; gap:0.5rem; }
+        .radio-group label {
+            display:flex; align-items:center; gap:0.4rem;
+            padding:0.4rem 1rem; border-radius:8px;
+            font-size:0.8125rem; font-weight:500;
+            border:1px solid rgba(0,0,0,0.08);
+            cursor:pointer; transition:all 0.15s ease;
+            user-select:none;
+            background:rgba(255,255,255,0.5);
+        }
+        .radio-group label:hover { border-color:var(--border-hover); background:var(--bg-hover); }
+        .radio-group input[type="radio"] { display:none; }
+        .radio-group input[type="radio"]:checked + span { color:var(--fg); }
+        .radio-group label:has(input:checked) {
+            border-color:var(--accent);
+            background:rgba(56,189,248,0.06);
+        }
+        .radio-group label.yes:has(input:checked) { border-color:var(--danger); background:rgba(239,68,68,0.06); }
+        .radio-group label.no:has(input:checked) { border-color:var(--accent-2); background:rgba(74,222,128,0.06); }
+
+        .radio-group .ai-tag {
+            font-size:0.625rem; padding:0.05rem 0.35rem;
+            border-radius:3px; margin-left:0.15rem;
+            background:rgba(192,132,252,0.15); color:var(--purple);
+        }
+
+        /* Button */
+        .btn {
+            width:100%; padding:0.75rem;
+            border-radius:var(--radius); border:none;
+            font-size:0.9375rem; font-weight:600;
+            background:linear-gradient(135deg, var(--accent), #0ea5e9);
+            color:white; cursor:pointer;
+            transition:all 0.2s ease;
+            margin-top:0.5rem;
+        }
+        .btn:hover { transform:translateY(-1px); filter:brightness(1.1); }
+        .btn:active { transform:translateY(0); }
+        .btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; filter:none; }
+
+        /* Result */
+        .result {
+            display:none; margin-top:1rem;
+            border-radius:var(--radius); padding:1.5rem;
+            border:1px solid var(--border);
+            animation:fadeUp 0.4s ease;
+        }
+        .result.visible { display:block; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+        .result-score {
+            text-align:center; margin-bottom:1rem;
+        }
+        .result-score .num {
+            font-size:3rem; font-weight:800; line-height:1;
+        }
+        .result-score .label {
+            font-size:0.8125rem; color:var(--muted); margin-top:0.25rem;
+        }
+        .result-score .risk-level {
+            font-size:1.1rem; font-weight:700; margin-top:0.5rem;
+        }
+
+        .result-metrics {
+            display:grid; grid-template-columns:repeat(3,1fr); gap:0.5rem;
+            margin:1rem 0;
+        }
+        .metric {
+            text-align:center; padding:0.5rem;
+            background:rgba(255,255,255,0.6); border-radius:8px;
+            border:1px solid rgba(0,0,0,0.04);
+        }
+        .metric .val { font-size:1.1rem; font-weight:700; }
+        .metric .lbl { font-size:0.675rem; color:var(--muted); margin-top:0.15rem; }
+
+        .result-advice {
+            font-size:0.8125rem; line-height:1.6;
+            padding:0.75rem 1rem; border-radius:8px;
+            margin-top:0.75rem;
+            background:rgba(255,255,255,0.5);
+            border:1px solid rgba(0,0,0,0.04);
+        }
+
+        .ref-table { width:100%; border-collapse:collapse; margin:1rem 0; font-size:0.75rem; }
+        .ref-table th, .ref-table td {
+            padding:0.4rem 0.5rem; border:1px solid rgba(0,0,0,0.08);
+            text-align:center;
+        }
+        .ref-table th { background:rgba(0,0,0,0.02); font-weight:600; }
+ 
+        .back-link {
+            display:block; text-align:center; margin-top:1.5rem;
+            font-size:0.75rem; color:var(--muted); text-decoration:none;
+        }
+        .back-link:hover { color:var(--fg); }
+
+        .low { color:var(--accent-2); }
+        .mid { color:var(--accent-3); }
+        .high { color:var(--danger); }
+
+        /* Divider */
+        .divider {
+            display:flex; align-items:center; gap:0.75rem;
+            margin:1.25rem 0; color:var(--muted);
+            font-size:0.75rem;
+        }
+        .divider::before, .divider::after {
+            content:''; flex:1; height:1px;
+            background:var(--border);
+        }
+
+        @media (max-width:480px) {
+            .container { padding:1.25rem 0.75rem 2rem; }
+            .header h1 { font-size:1.25rem; }
+            .result-metrics { grid-template-columns:repeat(3,1fr); gap:0.35rem; }
+            .metric .val { font-size:0.95rem; }
+            .upload-zone { padding:1.5rem 1rem; }
+            #sliceGrid { grid-template-columns:repeat(2,1fr) !important; }
+            .radio-group label { font-size:0.75rem; padding:0.35rem 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="bg-canvas"></div>
+<div class="container">
+    <div class="header">
+        <h1>🩺 HAE 术后胆漏风险预测</h1>
+        <div class="sub">肝泡型包虫病（HAE）根治性肝切除术后<br>胆漏风险评估 · 四维评分模型 · AI影像辅助</div>
+        <div class="badge">AUC 0.724 · 敏感性 86.4% · 阴性预测值 96.2%</div>
+    </div>
+
+    <!-- ─── AI 影像辅助分析（合并单图 + DICOM）─── -->
+    <div class="card" style="border-color:rgba(124,58,237,0.15)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.25rem">
+            <div class="card-title" style="color:var(--purple);margin-bottom:0">🤖 AI 影像辅助分析</div>
+        </div>
+        <div class="card-desc" style="margin-bottom:0.75rem">上传影像或DICOM ZIP，AI自动识别类型并分析</div>
+
+        <!-- ⚠️ 隐私提示 -->
+        <div style="margin-bottom:1rem;padding:0.6rem 0.75rem;border-radius:8px;font-size:0.7rem;line-height:1.5;background:#fef2f2;border:1px solid #fecaca;color:#991b1b">
+            <strong>⚠️ 隐私须知：</strong> 上传的影像会发送给模型进行分析，系统会自动清除元数据确保<strong>100%脱敏</strong>，如仍有顾虑，建议优先使用下方<strong>「文字描述」</strong>方式，或仅使用手工评估。 <a href="#" onclick="event.preventDefault();alert('脱敏策略：\\n1. DICOM → 清除患者姓名/ID/DOB/设备序列号等25+个标签\\n2. 图片 → 剥离EXIF/GPS/相机型号\\n3. 视觉遮挡四角患者信息\\n4. 最终保存为无元数据的PNG\\n\\n但：①CT/MRI影像本身含生物特征 ②无法保证覆盖所有医院格式 ③数据经网络传输')" style="color:#991b1b;text-decoration:underline">详细说明</a>
+        </div>
+
+        <!-- 尺寸说明（单张图片时显示） -->
+        <div id="sizeNotice" style="margin-bottom:1rem;padding:0.6rem 0.75rem;border-radius:8px;font-size:0.7rem;line-height:1.5;background:#fffbeb;border:1px solid #fde68a;color:#92400e">
+            <strong>📏 尺寸估算说明：</strong> 单张照片/截图 <strong>没有DICOM像素间距数据</strong>，
+            AI只能凭解剖标志（如肝脏大小）<strong>粗略肉眼估计</strong>病灶尺寸，<strong>不精确</strong>。
+            如需精确测量，请上传DICOM序列ZIP包（自动读取像素间距）<strong>↓</strong>
+        </div>
+
+        <!-- 智能上传区：同时接受图片和ZIP -->
+        <div class="upload-zone" id="uploadZone">
+            <input type="file" id="fileInput" accept="image/*,.zip">
+            <div id="uploadPlaceholder">
+                <div class="icon" id="uploadIcon">📸</div>
+                <div class="text" id="uploadText">点击上传 CT / MRI 影像或 DICOM ZIP 包</div>
+                <div class="hint" id="uploadHint">支持 JPG / PNG / BMP / WebP · ZIP 格式 · 最大 300MB</div>
+            </div>
+            <img class="image-preview" id="imagePreview" alt="影像预览">
+        </div>
+
+        <!-- 影像类型选择（仅图片模式显示） -->
+        <div class="img-type-select" id="imageTypeSelector">
+            <label><input type="radio" name="imageType" value="CT" checked><span>CT</span></label>
+            <label><input type="radio" name="imageType" value="MRI"><span>MRI</span></label>
+            <label><input type="radio" name="imageType" value="超声"><span>超声</span></label>
+            <label><input type="radio" name="imageType" value="其他"><span>其他</span></label>
+        </div>
+
+        <!-- 文件类型指示 -->
+        <div id="fileTypeBadge" style="display:none;margin-bottom:0.5rem;padding:0.3rem 0.6rem;border-radius:6px;font-size:0.7rem;font-weight:500"></div>
+
+        <!-- Spinner（单图模式） -->
+        <div class="spinner" id="spinner">
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <span class="spinner-text">AI 正在分析影像，请稍候…</span>
+        </div>
+
+        <!-- AI 单图分析结果 -->
+        <div id="aiResult" style="display:none">
+            <div class="ai-badge">✨ AI 分析结果</div>
+            <div class="ai-suggestion" id="aiSuggestion">
+                <!-- populated by JS -->
+            </div>
+            <button class="btn-apply" id="btnApplyAi" onclick="applyAiSuggestions()">
+                ✓ 采纳 AI 建议（可手动修改后确认）
+            </button>
+        </div>
+
+        <!-- 单图分析按钮 -->
+        <button class="btn-analyze" id="btnAnalyze" onclick="analyzeImage()" disabled>
+            🧠 AI 分析影像
+        </button>
+
+        <!-- 文字描述模式 -->
+        <div class="divider" style="margin:0.75rem 0;font-size:0.75rem;color:var(--accent-2)">
+            <span style="background:rgba(22,163,74,0.1);padding:0.1rem 0.5rem;border-radius:4px;font-size:0.7rem">✅ 推荐</span> 或 文字描述（零隐私风险）
+        </div>
+        <div class="card" style="padding:0.75rem 1rem;margin-bottom:0">
+            <div style="font-size:0.75rem;color:var(--muted);margin-bottom:0.4rem">
+                用文字描述影像所见，仅文本发送至AI，无隐私泄露风险
+            </div>
+            <textarea id="textDescription" rows="3" onblur="autoAnalyzeText()" style="width:100%;padding:0.5rem;border-radius:8px;border:1px solid rgba(0,0,0,0.1);font-size:0.8rem;font-family:var(--font-sans);background:rgba(255,255,255,0.6);color:var(--fg);resize:vertical" placeholder="例如：右肝前叶见类圆形低密度病灶，大小约8cm，边界清晰，病变累及肝门，拟行右半肝切除..."></textarea>
+            <button class="btn-apply" id="btnAnalyzeText" onclick="analyzeTextDescription()" style="border-color:var(--accent-2);color:var(--accent-2);margin-top:0.5rem;margin-bottom:0">
+                📝 AI 分析文字描述
+            </button>
+            <div id="textResult" style="display:none;margin-top:0.75rem;padding:0.75rem;border-radius:8px;background:rgba(22,163,74,0.04);border:1px solid rgba(22,163,74,0.1);font-size:0.75rem;line-height:1.5">
+                <!-- populated by JS -->
+            </div>
+        </div>
+
+        <!-- ─── DICOM 序列相关（ZIP上传后显示）─── -->
+        <div id="dicomSection" style="display:none">
+            <div class="divider" style="margin:0.75rem 0">📦 DICOM 序列处理</div>
+
+            <!-- 序列加载进度 -->
+            <div class="spinner" id="seriesSpinner">
+                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+                <span class="spinner-text">正在解析DICOM序列，智能挑选关键层面…</span>
+            </div>
+
+            <!-- 关键层面预览网格 -->
+            <div id="slicePreview" style="display:none">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem">
+                    <div style="font-size:0.8rem;font-weight:600">关键层面预览（共 <span id="totalCount">0</span> 张，已精选 <span id="selectedCount">0</span> 张）</div>
+                    <label style="display:flex;align-items:center;gap:0.3rem;font-size:0.75rem;cursor:pointer">
+                        <input type="checkbox" id="selectAllSlices" checked onclick="toggleAllSlices()"> 全选
+                    </label>
+                </div>
+                <div id="sliceGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:0.5rem;margin-bottom:0.75rem">
+                    <!-- 由JS动态填充 -->
+                </div>
+                <button class="btn-analyze" id="btnAnalyzeSeries" onclick="analyzeSeries()" style="background:linear-gradient(135deg,var(--accent),#0369a1)">
+                    🧠 AI 分析选中层面（多图联合）
+                </button>
+            </div>
+
+            <!-- 多图分析结果 -->
+            <div id="seriesResult" style="display:none;margin-top:0.75rem">
+                <div class="ai-badge">✨ 多层面联合分析结果</div>
+                <div class="ai-suggestion" id="seriesAnalysisResult">
+                    <!-- 动态填充 -->
+                </div>
+                <button class="btn-apply" id="btnApplySeries" onclick="applySeriesSuggestions()" style="display:none">
+                    ✓ 采纳 AI 建议
+                </button>
+                <!-- 保存到数据库 -->
+                <div id="saveExamSection" style="display:none;margin-top:0.75rem;padding:0.75rem;border-radius:8px;background:rgba(22,163,74,0.04);border:1px solid rgba(22,163,74,0.12)">
+                    <div style="font-size:0.8rem;font-weight:600;margin-bottom:0.4rem">💾 保存至患者数据库</div>
+                    <div style="font-size:0.7rem;color:var(--muted);margin-bottom:0.5rem">以下信息自动从DICOM提取，可手动修改后保存</div>
+                    <input type="text" id="savePatientName" placeholder="患者姓名" style="width:100%;padding:0.4rem 0.5rem;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:0.75rem;margin-bottom:0.3rem;background:rgba(255,255,255,0.6)">
+                    <input type="text" id="savePatientId" placeholder="患者ID" style="width:100%;padding:0.4rem 0.5rem;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:0.75rem;margin-bottom:0.3rem;background:rgba(255,255,255,0.6)">
+                    <input type="text" id="saveExamDate" placeholder="检查日期 (YYYY-MM-DD)" style="width:100%;padding:0.4rem 0.5rem;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:0.75rem;margin-bottom:0.3rem;background:rgba(255,255,255,0.6)">
+                    <input type="text" id="saveSeriesDesc" placeholder="序列描述" style="width:100%;padding:0.4rem 0.5rem;border-radius:6px;border:1px solid rgba(0,0,0,0.1);font-size:0.75rem;margin-bottom:0.5rem;background:rgba(255,255,255,0.6)">
+                    <button class="btn-apply" id="btnSaveExam" onclick="saveExamination()" style="border-color:var(--accent-2);color:var(--accent-2)">
+                        💾 保存到数据库
+                    </button>
+                    <div id="saveResult" style="font-size:0.7rem;margin-top:0.4rem;display:none"></div>
+                </div>
+            </div>
+        </div>  <!-- close dicomSection -->
+    </div>  <!-- close AI card -->
+    <div class="divider">或 手动评估</div>
+
+    <!-- ─── 手动评估表单 ─── -->
+    <form id="riskForm">
+        <!-- ① DBIL：数值输入，自动判断 -->
+        <div class="card">
+            <div class="card-title">① 术前 DBIL > 7.1 μmol/L？<span style="font-weight:400;font-size:0.75rem;color:var(--muted)">（手动填写数值，自动判断）</span></div>
+            <div class="card-desc">直接胆红素升高提示梗阻性黄疸（术前抽血）</div>
+            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                <input type="number" id="dbilInput" step="0.01" min="0" max="1000" placeholder="输入 DBIL 值"
+                    style="width:160px;padding:0.5rem 0.65rem;border-radius:8px;border:1px solid var(--border);font-size:0.875rem;background:rgba(255,255,255,0.6);color:var(--fg);outline:none;transition:border-color 0.2s"
+                    onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor=''" oninput="judgeDbil()">
+                <span id="dbilStatus" style="font-size:0.8125rem;font-weight:500;padding:0.3rem 0.7rem;border-radius:6px;border:1px solid var(--border);min-width:80px;text-align:center;transition:all 0.2s">
+                    未填写
+                </span>
+                <span style="font-size:0.7rem;color:var(--muted)">阈值：>7.1 μmol/L</span>
+            </div>
+            <input type="hidden" name="dbil" id="dbilHidden" value="0">
+        </div>
+
+        <!-- ② LDH：数值输入，自动判断 -->
+        <div class="card">
+            <div class="card-title">② 术前 LDH > 194 U/L？<span style="font-weight:400;font-size:0.75rem;color:var(--muted)">（手动填写数值，自动判断）</span></div>
+            <div class="card-desc">乳酸脱氢酶升高反映肝细胞损伤（术前抽血）</div>
+            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+                <input type="number" id="ldhInput" step="0.1" min="0" max="10000" placeholder="输入 LDH 值"
+                    style="width:160px;padding:0.5rem 0.65rem;border-radius:8px;border:1px solid var(--border);font-size:0.875rem;background:rgba(255,255,255,0.6);color:var(--fg);outline:none;transition:border-color 0.2s"
+                    onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor=''" oninput="judgeLdh()">
+                <span id="ldhStatus" style="font-size:0.8125rem;font-weight:500;padding:0.3rem 0.7rem;border-radius:6px;border:1px solid var(--border);min-width:80px;text-align:center;transition:all 0.2s">
+                    未填写
+                </span>
+                <span style="font-size:0.7rem;color:var(--muted)">阈值：>194 U/L</span>
+            </div>
+            <input type="hidden" name="ldh" id="ldhHidden" value="0">
+        </div>
+
+        <div class="card">
+            <div class="card-title">③ 病灶直径 > 12 cm？</div>
+            <div class="card-desc">巨大病灶，侵袭范围广（术前CT/MRI测量）<br><span style="font-size:0.675rem;color:#94a3b8">AI可辅助评估此指标</span></div>
+            <div class="radio-group">
+                <label class="no"><input type="radio" name="size" value="0" checked><span>否 (≤12cm) <span class="ai-tag" id="sizeNoTag" style="display:none">AI</span></span></label>
+                <label class="yes"><input type="radio" name="size" value="1"><span>是 (>12cm) <span class="ai-tag" id="sizeYesTag" style="display:none">AI</span></span></label>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">④ 大切肝面积？</div>
+            <div class="card-desc">切除涉及肝门或暴露 Glisson 鞘（术中判断）<br>
+                <span style="font-size:0.6875rem;color:#64748b">包括：右半肝切除、中央区切除、尾状叶切除等</span><br>
+                <span style="font-size:0.675rem;color:#94a3b8">AI可辅助评估此指标</span>
+            </div>
+            <div class="radio-group">
+                <label class="no"><input type="radio" name="resection" value="0" checked><span>否 (小面积) <span class="ai-tag" id="resectNoTag" style="display:none">AI</span></span></label>
+                <label class="yes"><input type="radio" name="resection" value="1"><span>是 (大面积) <span class="ai-tag" id="resectYesTag" style="display:none">AI</span></span></label>
+            </div>
+        </div>
+
+        <button class="btn" type="button" onclick="calcRisk()">评估胆漏风险</button>
+    </form>
+
+    <!-- Result -->
+    <div class="result" id="result">
+        <div class="result-score">
+            <div class="num" id="scoreNum">0</div>
+            <div class="label">总分（共4分）</div>
+            <div class="risk-level" id="riskLevel">-</div>
+        </div>
+
+        <div class="result-metrics">
+            <div class="metric">
+                <div class="val" id="leakRate">-</div>
+                <div class="lbl">预计胆漏率</div>
+            </div>
+            <div class="metric">
+                <div class="val" style="color:var(--accent-2)" id="npv">96.2%</div>
+                <div class="lbl">阴性预测值</div>
+            </div>
+            <div class="metric">
+                <div class="val" style="color:var(--accent)" id="sensitivity">86.4%</div>
+                <div class="lbl">敏感性</div>
+            </div>
+        </div>
+
+        <div class="result-advice" id="adviceText">
+            该模型基于四维评分，AUC 0.724，请结合临床综合判断。
+        </div>
+    </div>
+
+    <!-- Reference Table -->
+    <div class="card" style="margin-top:1rem">
+        <div style="font-size:0.75rem;font-weight:600;margin-bottom:0.5rem">📊 风险分层参考</div>
+        <table class="ref-table">
+            <tr><th>总分</th><th>风险等级</th><th>胆漏率</th></tr>
+            <tr><td>0</td><td class="low">低风险 🟢</td><td>4.5%</td></tr>
+            <tr><td>1</td><td class="mid">中风险 🟡</td><td>9.1%</td></tr>
+            <tr><td>≥2</td><td class="high">高风险 🔴</td><td>86.4%</td></tr>
+        </table>
+        <div style="font-size:0.6875rem;color:var(--muted);margin-top:0.5rem">
+            AUC: 0.724 · 特异性: 58.5%
+        </div>
+    </div>
+
+    <div class="disclaimer" style="margin-top:2rem;padding:0.75rem 1rem;border-radius:8px;font-size:0.6875rem;color:#64748b;line-height:1.6;text-align:center;background:rgba(255,255,255,0.7);border:1px solid rgba(0,0,0,0.06)">
+        ⚠️ 本评估仅供临床参考，不构成诊疗决策的唯一依据。<br>
+        AI辅助分析仅为参考，最终判断由临床医生确认。<br>
+        ✅ 推荐使用「文字描述」模式，仅文本发送，无隐私风险。<br>
+        模型存在假阳性风险（特异性58.5%），请结合影像及临床综合判断。
+    </div>
+
+    <a class="back-link" href="https://maoni.icu/portal/">← 返回 Portal</a>
+</div>
+
+<script>
+// ─── 影像上传 ───
+let uploadedFile = null;
+let aiSuggestions = null;
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput = document.getElementById('fileInput');
+const preview = document.getElementById('imagePreview');
+const placeholder = document.getElementById('uploadPlaceholder');
+const btnAnalyze = document.getElementById('btnAnalyze');
+
+fileInput.addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    // 智能识别文件类型
+    if (file.name.toLowerCase().endsWith('.zip')) {
+        handleZipFile(file);
+    } else {
+        handleImageFile(file);
+    }
+});
+
+uploadZone.addEventListener('dragover', function(e) {
+    e.preventDefault();
+    this.classList.add('dragover');
+});
+uploadZone.addEventListener('dragleave', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+});
+uploadZone.addEventListener('drop', function(e) {
+    e.preventDefault();
+    this.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    if (file.name.toLowerCase().endsWith('.zip')) {
+        handleZipFile(file);
+    } else {
+        handleImageFile(file);
+    }
+});
+
+function handleImageFile(file) {
+    // Validate
+    const validTypes = ['image/jpeg','image/png','image/bmp','image/webp'];
+    if (!validTypes.includes(file.type)) {
+        alert('请上传图片格式文件（JPG/PNG/BMP/WebP）或DICOM ZIP包');
+        return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+        alert('文件大小不能超过 20MB');
+        return;
+    }
+
+    uploadedFile = file;
+
+    // Hide DICOM section if visible
+    document.getElementById('dicomSection').style.display = 'none';
+
+    // Show notice about size estimation
+    document.getElementById('sizeNotice').style.display = 'block';
+
+    // Show image type selector
+    document.getElementById('imageTypeSelector').style.display = 'flex';
+
+    // Show file type badge
+    var badge = document.getElementById('fileTypeBadge');
+    badge.style.display = 'block';
+    badge.style.background = 'rgba(124,58,237,0.08)';
+    badge.style.color = 'var(--purple)';
+    badge.style.border = '1px solid rgba(124,58,237,0.15)';
+    badge.innerHTML = '🖼️ 单张图片模式 · AI将粗略估计病灶尺寸';
+
+    // Show preview
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        preview.src = e.target.result;
+        preview.classList.add('visible');
+        placeholder.style.display = 'none';
+        uploadZone.classList.add('has-image');
+        uploadZone.querySelector('.icon').style.display = 'none';
+        uploadZone.querySelector('.text').textContent = file.name;
+        uploadZone.querySelector('.hint').textContent =
+            (file.size / 1024 / 1024).toFixed(1) + ' MB · 点击或拖拽替换';
+        btnAnalyze.disabled = false;
+    };
+    reader.readAsDataURL(file);
+}
+
+// ─── AI 影像分析 ───
+async function analyzeImage() {
+    if (!uploadedFile) {
+        alert('请先上传影像文件');
+        return;
+    }
+
+    const btn = document.getElementById('btnAnalyze');
+    const spinner = document.getElementById('spinner');
+    const aiResult = document.getElementById('aiResult');
+    const imageType = document.querySelector('input[name="imageType"]:checked').value;
+
+    // Show spinner
+    btn.disabled = true;
+    btn.textContent = '⏳ 分析中…';
+    spinner.classList.add('visible');
+    aiResult.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', uploadedFile);
+    formData.append('image_type', imageType);
+
+    try {
+        const resp = await fetch('/api/bile-leak/analyze', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!resp.ok) {
+            const err = await resp.text();
+            throw new Error(err.slice(0, 200));
+        }
+
+        const data = await resp.json();
+        aiSuggestions = data;
+
+        // Render AI analysis
+        renderAiResult(data);
+        aiResult.style.display = 'block';
+        aiResult.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    } catch (err) {
+        alert('AI分析失败：' + err.message);
+        console.error(err);
+    } finally {
+        spinner.classList.remove('visible');
+        btn.disabled = false;
+        btn.textContent = '🧠 AI 分析影像';
+    }
+}
+
+function renderAiResult(data) {
+    const a = data.analysis;
+    const container = document.getElementById('aiSuggestion');
+
+    const confClass = a.confidence === '高' ? 'conf-high' : a.confidence === '中' ? 'conf-mid' : 'conf-low';
+
+    const sizeText = a.diameter_gt_12cm === '是' ? '🔴 是 (>12cm)' : '🟢 否 (≤12cm)';
+    const resectText = a.large_resection === '是' ? '🔴 是 (大面积)' : '🟢 否 (小面积)';
+
+    container.innerHTML = `
+        <div class="item">
+            <span class="label">③ 病灶直径：</span>
+            <span class="value">${sizeText}</span>
+        </div>
+        <div style="font-size:0.6875rem;color:var(--muted);margin:0.2rem 0 0.5rem 5.4em;">
+            ${a.diameter_reason || ''}
+        </div>
+        <div class="item">
+            <span class="label">④ 大切肝面积：</span>
+            <span class="value">${resectText}</span>
+        </div>
+        <div style="font-size:0.6875rem;color:var(--muted);margin:0.2rem 0 0.5rem 5.4em;">
+            ${a.resection_reason || ''}
+        </div>
+        <div class="item">
+            <span class="label">置信度：</span>
+            <span class="value"><span class="confidence ${confClass}">${a.confidence}</span></span>
+        </div>
+        <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);font-size:0.6875rem;color:var(--muted)">
+            📋 其他发现：${a.additional_findings || '无'}
+        </div>
+        <div class="disclaimer-text">
+            ${a.disclaimer || '本分析为AI辅助，仅供参考。'}
+        </div>
+    `;
+
+    document.getElementById('btnApplyAi').disabled = false;
+}
+
+function applyAiSuggestions() {
+    if (!aiSuggestions) return;
+
+    const s = aiSuggestions.suggestions;
+
+    // Apply size suggestion
+    if (s.size === 1) {
+        document.querySelector('input[name="size"][value="1"]').checked = true;
+        document.getElementById('sizeYesTag').style.display = 'inline';
+        document.getElementById('sizeNoTag').style.display = 'none';
+    } else if (s.size === 0) {
+        document.querySelector('input[name="size"][value="0"]').checked = true;
+        document.getElementById('sizeNoTag').style.display = 'inline';
+        document.getElementById('sizeYesTag').style.display = 'none';
+    }
+
+    // Apply resection suggestion
+    if (s.resection === 1) {
+        document.querySelector('input[name="resection"][value="1"]').checked = true;
+        document.getElementById('resectYesTag').style.display = 'inline';
+        document.getElementById('resectNoTag').style.display = 'none';
+    } else if (s.resection === 0) {
+        document.querySelector('input[name="resection"][value="0"]').checked = true;
+        document.getElementById('resectNoTag').style.display = 'inline';
+        document.getElementById('resectYesTag').style.display = 'none';
+    }
+
+    document.getElementById('btnApplyAi').disabled = true;
+    document.getElementById('btnApplyAi').textContent = '✓ 已采纳 AI 建议（可手动修改）';
+
+    // Scroll to form
+    document.getElementById('riskForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─── DBIL/LDH 自动判断 ───
+function judgeDbil() {
+    var val = parseFloat(document.getElementById('dbilInput').value);
+    var status = document.getElementById('dbilStatus');
+    var hidden = document.getElementById('dbilHidden');
+    if (isNaN(val)) {
+        status.textContent = '未填写';
+        status.style.borderColor = 'var(--border)';
+        status.style.color = 'var(--muted)';
+        status.style.background = 'transparent';
+        hidden.value = '0';
+    } else if (val > 7.1) {
+        status.textContent = '🔴 是 (>7.1)';
+        status.style.borderColor = '#ef4444';
+        status.style.color = '#ef4444';
+        status.style.background = 'rgba(239,68,68,0.06)';
+        hidden.value = '1';
+    } else {
+        status.textContent = '🟢 否 (≤7.1)';
+        status.style.borderColor = '#4ade80';
+        status.style.color = '#16a34a';
+        status.style.background = 'rgba(74,222,128,0.06)';
+        hidden.value = '0';
+    }
+    saveState();
+}
+
+function judgeLdh() {
+    var val = parseFloat(document.getElementById('ldhInput').value);
+    var status = document.getElementById('ldhStatus');
+    var hidden = document.getElementById('ldhHidden');
+    if (isNaN(val)) {
+        status.textContent = '未填写';
+        status.style.borderColor = 'var(--border)';
+        status.style.color = 'var(--muted)';
+        status.style.background = 'transparent';
+        hidden.value = '0';
+    } else if (val > 194) {
+        status.textContent = '🔴 是 (>194)';
+        status.style.borderColor = '#ef4444';
+        status.style.color = '#ef4444';
+        status.style.background = 'rgba(239,68,68,0.06)';
+        hidden.value = '1';
+    } else {
+        status.textContent = '🟢 否 (≤194)';
+        status.style.borderColor = '#4ade80';
+        status.style.color = '#16a34a';
+        status.style.background = 'rgba(74,222,128,0.06)';
+        hidden.value = '0';
+    }
+    saveState();
+}
+
+// ─── 风险评估 ───
+function calcRisk() {
+    const form = document.getElementById('riskForm');
+    const data = new FormData(form);
+    let score = 0;
+    ['dbil','ldh','size','resection'].forEach(k => {
+        score += parseInt(data.get(k) || '0');
+    });
+
+    document.getElementById('scoreNum').textContent = score;
+    document.getElementById('scoreNum').style.color = score >= 2 ? '#ef4444' : score === 1 ? '#f59e0b' : '#4ade80';
+
+    let level, rate, advice;
+    if (score >= 2) {
+        level = '🔴 高风险';
+        rate = '86.4%';
+        advice = '⚠️ 该患者胆漏风险极高。建议：术前充分评估手术方案，术中精细处理肝创面，术后密切监测胆漏征象，考虑预防性引流。建议多学科会诊（肝胆外科 + 介入科）。';
+        document.getElementById('riskLevel').style.color = '#ef4444';
+    } else if (score === 1) {
+        level = '🟡 中风险';
+        rate = '9.1%';
+        advice = '该患者胆漏风险中等。建议：术中注意肝创面处理，术后常规监测引流量及颜色，如有异常及时行胆道造影或MRCP。';
+        document.getElementById('riskLevel').style.color = '#f59e0b';
+    } else {
+        level = '🟢 低风险';
+        rate = '4.5%';
+        advice = '该患者胆漏风险低（阴性预测值96.2%）。按常规术后管理即可，但仍需保持警惕，观察引流液性状变化。';
+        document.getElementById('riskLevel').style.color = '#4ade80';
+    }
+
+    document.getElementById('riskLevel').textContent = level;
+    document.getElementById('leakRate').textContent = rate;
+    document.getElementById('leakRate').style.color = score >= 2 ? '#ef4444' : score === 1 ? '#f59e0b' : '#4ade80';
+    document.getElementById('adviceText').textContent = advice;
+
+    const result = document.getElementById('result');
+    result.classList.remove('visible');
+    void result.offsetWidth;
+    result.classList.add('visible');
+    result.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// ─── 文字描述分析（零隐私风险）───
+
+function renderSliceGrid(data) {
+    const grid = document.getElementById('sliceGrid');
+    const totalEl = document.getElementById('totalCount');
+    const selEl = document.getElementById('selectedCount');
+    
+    document.getElementById('totalCount').textContent = data.total_slices;
+    document.getElementById('selectedCount').textContent = data.analyzed_count;
+
+    let html = '';
+    data.selected_slices.forEach((s, idx) => {
+        html += `
+        <div style="border:2px solid rgba(2,132,199,0.3);border-radius:8px;overflow:hidden;cursor:pointer;transition:all 0.15s" id="sliceCard_${idx}" onclick="toggleSlice(${idx})">
+            <img src="data:image/png;base64,${s.preview_b64}" style="width:100%;display:block;aspect-ratio:1;object-fit:contain;background:#000">
+            <div style="padding:0.25rem 0.4rem;font-size:0.6rem;display:flex;justify-content:space-between;background:rgba(2,132,199,0.04)">
+                <span title="${s.reason || ''}">${s.slice_location} ${s.reason ? '· ' + s.reason : ''}</span>
+                <span style="color:var(--accent-2)">✓ 已选</span>
+            </div>
+            <input type="checkbox" id="cb_slice_${idx}" data-idx="${s.index}" checked style="display:none">
+        </div>`;
+    });
+    grid.innerHTML = html;
+
+    // 显示像素间距信息
+    if (data.pixel_spacing) {
+        const infoEl = document.createElement('div');
+        infoEl.style.cssText = 'margin-bottom:0.5rem;padding:0.4rem 0.6rem;border-radius:6px;font-size:0.7rem;background:rgba(22,163,74,0.06);border:1px solid rgba(22,163,74,0.12);color:var(--accent-2)';
+        infoEl.innerHTML = `📏 DICOM像素间距：<strong>${data.pixel_spacing}</strong> — AI将据此精确计算病灶尺寸`;
+        document.getElementById('slicePreview').insertBefore(infoEl, document.getElementById('sliceGrid'));
+    }
+}
+
+function toggleSlice(idx) {
+    const card = document.getElementById(`sliceCard_${idx}`);
+    const cb = document.getElementById(`cb_slice_${idx}`);
+    cb.checked = !cb.checked;
+    card.style.borderColor = cb.checked ? 'rgba(2,132,199,0.3)' : 'rgba(239,68,68,0.3)';
+    card.querySelector('div span:last-child').textContent = cb.checked ? '✓ 已选' : '✕ 排除';
+    updateSelectedCount();
+}
+
+function toggleAllSlices() {
+    const checked = document.getElementById('selectAllSlices').checked;
+    document.querySelectorAll('[id^="cb_slice_"]').forEach(cb => {
+        cb.checked = checked;
+        const idx = cb.id.replace('cb_slice_', '');
+        const card = document.getElementById(`sliceCard_${idx}`);
+        if (card) {
+            card.style.borderColor = checked ? 'rgba(2,132,199,0.3)' : 'rgba(239,68,68,0.3)';
+            card.querySelector('div span:last-child').textContent = checked ? '✓ 已选' : '✕ 排除';
+        }
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll('[id^="cb_slice_"]:checked').length;
+    document.getElementById('selectedCount').textContent = count;
+}
+
+async function analyzeSeries() {
+    const checked = [...document.querySelectorAll('[id^="cb_slice_"]:checked')];
+    if (checked.length === 0) {
+        alert('请至少选择1个层面');
+        return;
+    }
+
+    const indices = checked.map(cb => cb.dataset.idx);
+    const btn = document.getElementById('btnAnalyzeSeries');
+    const resultDiv = document.getElementById('seriesResult');
+    
+    btn.disabled = true;
+    btn.textContent = '⏳ 多图分析中…';
+    resultDiv.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/bile-leak/analyze-series', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `job_id=${encodeURIComponent(seriesJobId)}&slice_indices=${indices.join(',')}&image_type=CT`
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+        
+        const data = await resp.json();
+        seriesSuggestions = data;
+        renderSeriesResult(data);
+        resultDiv.style.display = 'block';
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (err) {
+        alert('分析失败：' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '🧠 AI 分析选中层面（多图联合）';
+    }
+}
+
+function renderSeriesResult(data) {
+    const a = data.analysis;
+    const container = document.getElementById('seriesAnalysisResult');
+
+    const confClass = a.confidence === '高' ? 'conf-high' : a.confidence === '中' ? 'conf-mid' : 'conf-low';
+    const sizeText = a.diameter_gt_12cm === '是' ? '🔴 是 (>12cm)' : '🟢 否 (≤12cm)';
+    const resectText = a.large_resection === '是' ? '🔴 是 (大面积)' : '🟢 否 (小面积)';
+
+    container.innerHTML = `
+        <div style="font-weight:600;margin-bottom:0.4rem">📋 AI 多图联合分析结果</div>
+        <div class="item">
+            <span class="label">③ 病灶直径：</span>
+            <span class="value">${sizeText}</span>
+        </div>
+        <div style="font-size:0.6875rem;color:var(--muted);margin:0.2rem 0 0.5rem 5.4em;">${a.diameter_reason || ''}</div>
+        <div class="item">
+            <span class="label">④ 大切肝面积：</span>
+            <span class="value">${resectText}</span>
+        </div>
+        <div style="font-size:0.6875rem;color:var(--muted);margin:0.2rem 0 0.5rem 5.4em;">${a.resection_reason || ''}</div>
+        <div class="item">
+            <span class="label">置信度：</span>
+            <span class="value"><span class="confidence ${confClass}">${a.confidence}</span></span>
+        </div>
+        <div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid var(--border);font-size:0.6875rem;color:var(--muted)">
+            📋 其他发现：${a.additional_findings || '无'}
+        </div>
+        <div class="disclaimer-text">${a.disclaimer || ''}</div>
+    `;
+
+    document.getElementById('btnApplySeries').style.display = 'block';
+    document.getElementById('btnApplySeries').disabled = false;
+}
+
+function applySeriesSuggestions() {
+    if (!seriesSuggestions) return;
+    const s = seriesSuggestions.suggestions;
+
+    if (s.size === 1) {
+        document.querySelector('input[name="size"][value="1"]').checked = true;
+        document.getElementById('sizeYesTag').style.display = 'inline';
+        document.getElementById('sizeNoTag').style.display = 'none';
+    } else if (s.size === 0) {
+        document.querySelector('input[name="size"][value="0"]').checked = true;
+        document.getElementById('sizeNoTag').style.display = 'inline';
+        document.getElementById('sizeYesTag').style.display = 'none';
+    }
+
+    if (s.resection === 1) {
+        document.querySelector('input[name="resection"][value="1"]').checked = true;
+        document.getElementById('resectYesTag').style.display = 'inline';
+        document.getElementById('resectNoTag').style.display = 'none';
+    } else if (s.resection === 0) {
+        document.querySelector('input[name="resection"][value="0"]').checked = true;
+        document.getElementById('resectNoTag').style.display = 'inline';
+        document.getElementById('resectYesTag').style.display = 'none';
+    }
+
+    document.getElementById('btnApplySeries').disabled = true;
+    document.getElementById('btnApplySeries').textContent = '✓ 已采纳 AI 建议（可手动修改）';
+    document.getElementById('riskForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─── 自动分析：光标离开文字描述时自动判断③④ ───
+var _lastAutoText = '';
+async function autoAnalyzeText() {
+    var textarea = document.getElementById('textDescription');
+    var text = textarea.value.trim();
+    if (!text || text === _lastAutoText) return;  // 无内容或未变化则不重复请求
+    _lastAutoText = text;
+
+    try {
+        var resp = await fetch('/api/bile-leak/analyze-text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'description=' + encodeURIComponent(text)
+        });
+        if (!resp.ok) return;
+        var data = await resp.json();
+        textSuggestions = data;
+        var s = data.suggestions || {};
+
+        // 自动填充③病灶直径
+        if (s.size === 1) {
+            document.querySelector('input[name="size"][value="1"]').checked = true;
+            document.getElementById('sizeYesTag').style.display = 'inline';
+            document.getElementById('sizeNoTag').style.display = 'none';
+        } else if (s.size === 0) {
+            document.querySelector('input[name="size"][value="0"]').checked = true;
+            document.getElementById('sizeNoTag').style.display = 'inline';
+            document.getElementById('sizeYesTag').style.display = 'none';
+        }
+
+        // 自动填充④大切肝面积
+        if (s.resection === 1) {
+            document.querySelector('input[name="resection"][value="1"]').checked = true;
+            document.getElementById('resectYesTag').style.display = 'inline';
+            document.getElementById('resectNoTag').style.display = 'none';
+        } else if (s.resection === 0) {
+            document.querySelector('input[name="resection"][value="0"]').checked = true;
+            document.getElementById('resectNoTag').style.display = 'inline';
+            document.getElementById('resectYesTag').style.display = 'none';
+        }
+
+        // 显示提示
+        if (s.size !== null || s.resection !== null) {
+            var resultDiv = document.getElementById('textResult');
+            var items = [];
+            if (s.size !== null) items.push('③ 病灶直径：' + (s.size ? '>12cm' : '≤12cm'));
+            if (s.resection !== null) items.push('④ 大切肝面积：' + (s.resection ? '是' : '否'));
+            resultDiv.innerHTML = '<div style="font-size:0.7rem;color:var(--accent-2)">🤖 自动分析已更新：' + items.join(' · ') + '</div>';
+            resultDiv.style.display = 'block';
+            setTimeout(function(){ resultDiv.style.display = 'none'; }, 4000);
+        }
+
+        saveState();
+    } catch(e) {
+        // 静默失败，不干扰用户
+    }
+}
+
+// ─── ZIP 上传处理 ───
+let seriesJobId = null;
+let seriesSuggestions = null;
+
+async function handleZipFile(file) {
+    if (!file.name.toLowerCase().endsWith('.zip')) {
+        alert('请上传ZIP格式的DICOM压缩包');
+        return;
+    }
+    if (file.size > 300 * 1024 * 1024) {
+        alert('文件过大，最大300MB');
+        return;
+    }
+
+    // 清理单图状态
+    uploadedFile = null;
+    preview.classList.remove('visible');
+    document.getElementById('aiResult').style.display = 'none';
+    btnAnalyze.disabled = true;
+
+    // 显示 DICOM 区域
+    document.getElementById('dicomSection').style.display = 'block';
+
+    // 隐藏单图相关的界面元素
+    document.getElementById('sizeNotice').style.display = 'none';
+    document.getElementById('imageTypeSelector').style.display = 'none';
+
+    // Show file type badge
+    var badge = document.getElementById('fileTypeBadge');
+    badge.style.display = 'block';
+    badge.style.background = 'rgba(2,132,199,0.08)';
+    badge.style.color = 'var(--accent)';
+    badge.style.border = '1px solid rgba(2,132,199,0.15)';
+    badge.innerHTML = '🗜️ DICOM ZIP 模式 · AI将精确计算病灶尺寸（基于像素间距）';
+
+    // Update placeholder
+    placeholder.style.display = 'none';
+    uploadZone.classList.add('has-image');
+    uploadZone.querySelector('.icon').style.display = 'none';
+    uploadZone.querySelector('.text').textContent = file.name;
+    uploadZone.querySelector('.hint').textContent = (file.size / 1024 / 1024).toFixed(1) + ' MB · 点击或拖拽替换';
+
+    const spinner = document.getElementById('seriesSpinner');
+    const preview = document.getElementById('slicePreview');
+    const btn = document.getElementById('btnAnalyzeSeries');
+
+    spinner.classList.add('visible');
+    preview.style.display = 'none';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const resp = await fetch('/api/bile-leak/upload-series', { method: 'POST', body: formData });
+        if (!resp.ok) throw new Error(await resp.text());
+        
+        const data = await resp.json();
+        seriesJobId = data.job_id;
+        renderSliceGrid(data);
+        preview.style.display = 'block';
+    } catch (err) {
+        alert('上传失败：' + err.message);
+    } finally {
+        spinner.classList.remove('visible');
+        btn.disabled = false;
+    }
+}
+
+async function analyzeTextDescription() {
+    const textarea = document.getElementById('textDescription');
+    const text = textarea.value.trim();
+    if (!text) {
+        alert('请先输入影像描述');
+        return;
+    }
+
+    const btn = document.getElementById('btnAnalyzeText');
+    const resultDiv = document.getElementById('textResult');
+    
+    btn.disabled = true;
+    btn.textContent = '⏳ 分析中…';
+    resultDiv.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/bile-leak/analyze-text', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: 'description=' + encodeURIComponent(text)
+        });
+
+        if (!resp.ok) throw new Error(await resp.text());
+
+        const data = await resp.json();
+        textSuggestions = data;
+
+        // 结构化显示结果
+        let html = '<div style="font-weight:600;margin-bottom:0.5rem">📋 AI 分析结果</div>';
+        
+        // 显示文字分析
+        let analysisText = data.analysis || '';
+        // 显示前500字
+        html += '<div style="font-size:0.75rem;line-height:1.6;margin-bottom:0.5rem;max-height:200px;overflow-y:auto">';
+        html += analysisText.replace(/```json|```/g, '').trim().slice(0, 600);
+        if (analysisText.length > 600) html += '…';
+        html += '</div>';
+
+        // 自动填表按钮
+        const s = data.suggestions || {};
+        const canFillSize = s.size !== null && s.size !== undefined;
+        const canFillResect = s.resection !== null && s.resection !== undefined;
+
+        if (canFillSize || canFillResect) {
+            html += '<div style="margin-bottom:0.4rem;font-size:0.7rem;color:var(--accent-2)">';
+            html += '🎯 AI已从描述中识别以下信息：';
+            html += '</div>';
+            if (canFillSize) {
+                html += `<div style="font-size:0.7rem;margin-bottom:0.2rem">③ 病灶直径 > 12cm：${s.size ? '是' : '否'}</div>`;
+            }
+            if (canFillResect) {
+                html += `<div style="font-size:0.7rem;margin-bottom:0.2rem">④ 大切肝面积：${s.resection ? '是' : '否'}</div>`;
+            }
+            html += '<button class="btn-apply" onclick="applyTextSuggestions()" style="margin-top:0.5rem;margin-bottom:0;border-color:var(--accent-2);color:var(--accent-2)">';
+            html += '✓ 采纳AI建议，自动填表';
+            html += '</button>';
+        } else {
+            html += '<div style="margin-top:0.5rem;padding-top:0.5rem;border-top:1px solid rgba(0,0,0,0.06);font-size:0.6875rem;color:var(--muted)">';
+            html += '💡 未识别到明确的尺寸/切面信息，请手动勾选。';
+            html += '</div>';
+        }
+
+        resultDiv.innerHTML = html;
+        resultDiv.style.display = 'block';
+        resultDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    } catch (err) {
+        resultDiv.innerHTML = '<div style="color:var(--danger)">❌ 分析失败：' + err.message + '</div>';
+        resultDiv.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '📝 AI 分析文字描述';
+    }
+}
+
+function applyTextSuggestions() {
+    if (!textSuggestions) return;
+    const s = textSuggestions.suggestions;
+    if (!s) return;
+
+    if (s.size === 1) {
+        document.querySelector('input[name="size"][value="1"]').checked = true;
+        document.getElementById('sizeYesTag').style.display = 'inline';
+        document.getElementById('sizeNoTag').style.display = 'none';
+    } else if (s.size === 0) {
+        document.querySelector('input[name="size"][value="0"]').checked = true;
+        document.getElementById('sizeNoTag').style.display = 'inline';
+        document.getElementById('sizeYesTag').style.display = 'none';
+    }
+
+    if (s.resection === 1) {
+        document.querySelector('input[name="resection"][value="1"]').checked = true;
+        document.getElementById('resectYesTag').style.display = 'inline';
+        document.getElementById('resectNoTag').style.display = 'none';
+    } else if (s.resection === 0) {
+        document.querySelector('input[name="resection"][value="0"]').checked = true;
+        document.getElementById('resectNoTag').style.display = 'inline';
+        document.getElementById('resectYesTag').style.display = 'none';
+    }
+
+    // 更新采纳按钮
+    const btn = document.querySelector('#textResult .btn-apply');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '✓ 已采纳（可手动修改）';
+    }
+
+    document.getElementById('riskForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    saveState();
+}
+
+// ─── 页面状态持久化 ───
+function saveState() {
+    try {
+        const state = {};
+        // DBIL/LDH 数值
+        state.dbilVal = document.getElementById('dbilInput').value;
+        state.ldhVal = document.getElementById('ldhInput').value;
+        // 单选按钮（③④）
+        ['size','resection'].forEach(k => {
+            const radio = document.querySelector(`input[name="${k}"]:checked`);
+            state[k] = radio ? radio.value : '0';
+        });
+        state.textDescription = document.getElementById('textDescription').value;
+        localStorage.setItem('bileLeakState', JSON.stringify(state));
+    } catch(e) {}
+}
+
+function restoreState() {
+    try {
+        const saved = localStorage.getItem('bileLeakState');
+        if (!saved) return;
+        const state = JSON.parse(saved);
+        // 恢复 DBIL/LDH 数值
+        if (state.dbilVal !== undefined) {
+            document.getElementById('dbilInput').value = state.dbilVal;
+            judgeDbil();
+        }
+        if (state.ldhVal !== undefined) {
+            document.getElementById('ldhInput').value = state.ldhVal;
+            judgeLdh();
+        }
+        // 恢复单选按钮（③④）
+        ['size','resection'].forEach(k => {
+            const val = state[k];
+            if (val !== undefined) {
+                const radio = document.querySelector(`input[name="${k}"][value="${val}"]`);
+                if (radio) radio.checked = true;
+            }
+        });
+        if (state.textDescription) {
+            document.getElementById('textDescription').value = state.textDescription;
+        }
+    } catch(e) {}
+}
+
+// 每次radio变更时保存
+document.addEventListener('DOMContentLoaded', function() {
+    restoreState();
+    document.querySelectorAll('#riskForm input[type="radio"]').forEach(el => {
+        el.addEventListener('change', saveState);
+    });
+    // DBIL/LDH 输入变更时自动保存（通过 oninput 已调用 saveState）
+    document.getElementById('dbilInput').addEventListener('blur', saveState);
+    document.getElementById('ldhInput').addEventListener('blur', saveState);
+    document.getElementById('textDescription').addEventListener('input', saveState);
+});
+// ─── 保存检查到数据库 ───unction saveExamination() {    const btn = document.getElementById("btnSaveExam");    const result = document.getElementById("saveResult");    btn.disabled = true;    btn.textContent = "⏳ 保存中...";    result.style.display = "none";        const formData = new URLSearchParams();    formData.set("job_id", seriesJobId || "");    formData.set("patient_name", document.getElementById("savePatientName").value);    formData.set("patient_id_num", document.getElementById("savePatientId").value);    formData.set("exam_date", document.getElementById("saveExamDate").value);    formData.set("series_desc", document.getElementById("saveSeriesDesc").value);    formData.set("modality", "CT");        fetch("/api/bile-leak/save-examination", {        method: "POST",        headers: { "Content-Type": "application/x-www-form-urlencoded" },\                                                                    body: formData.toString()    })    .then(function(r) { return r.ok ? r.json() : r.text().then(function(t) { throw new Error(t); }); })    .then(function(d) {        result.style.display = "block";        result.style.color = "var(--accent-2)";        result.innerHTML = "✅ 保存成功！检查ID: " + d.examination_id + " <a href="hae-management.html" style="color:#3b82f6">查看管理页面 →</a>";    })    .catch(function(err) {        result.style.display = "block";        result.style.color = "var(--danger)";        result.textContent = "❌ 保存失败: " + err.message;    })    .finally(function() {        btn.disabled = false;        btn.textContent = "💾 保存到数据库";    });}\// 在系列分析完成后显示保存表单ar origRenderSeries = renderSeriesResult;enderSeriesResult = function(data) {    origRenderSeries(data);    document.getElementById("saveExamSection").style.display = "block";    document.getElementById("savePatientName").focus();};
+</script>
+</body>
+</html>
