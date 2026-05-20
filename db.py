@@ -25,6 +25,15 @@ ARCHIVE_DIR = Path(os.getenv("DATA_DIR", "/data/bile-leak/archive"))
 ARCHIVE_ZIP = ARCHIVE_DIR / "zip"
 ARCHIVE_SLICES = ARCHIVE_DIR / "slices"
 
+# 运算符映射
+OP_MAP = {
+    "gt": ">",
+    "gte": ">=",
+    "eq": "=",
+    "lte": "<=",
+    "lt": "<",
+}
+
 
 def get_conn():
     """获取 MySQL 连接"""
@@ -199,6 +208,20 @@ def list_examinations(filters: dict = None) -> list:
                     )
                     kw = f'%{filters["keyword"]}%'
                     params.extend([kw, kw, kw])
+
+                # DBIL 运算符查询
+                for op, val in filters.get("dbil_conds", []):
+                    sql_op = OP_MAP.get(op)
+                    if sql_op:
+                        where_clauses.append(f"CAST(e.preop_dbil AS DECIMAL(10,2)) {sql_op} %s")
+                        params.append(float(val))
+
+                # LDH 运算符查询
+                for op, val in filters.get("ldh_conds", []):
+                    sql_op = OP_MAP.get(op)
+                    if sql_op:
+                        where_clauses.append(f"CAST(e.preop_ldh AS DECIMAL(10,2)) {sql_op} %s")
+                        params.append(float(val))
 
             sql = f"""SELECT e.id, e.upload_date, e.exam_date, e.series_description,
                             e.modality, e.total_dicom_slices, e.selected_slice_count,

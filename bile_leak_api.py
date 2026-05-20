@@ -1055,6 +1055,14 @@ async def list_examinations(
     modality: str = "",
     has_pixel_spacing: str = "",
     keyword: str = "",
+    dbil_op1: str = "",
+    dbil_val1: str = "",
+    dbil_op2: str = "",
+    dbil_val2: str = "",
+    ldh_op1: str = "",
+    ldh_val1: str = "",
+    ldh_op2: str = "",
+    ldh_val2: str = "",
 ):
     """查询检查列表（增强版）"""
     filters = {}
@@ -1071,14 +1079,37 @@ async def list_examinations(
     if has_pixel_spacing: filters["has_pixel_spacing"] = True
     if keyword: filters["keyword"] = keyword
 
+    if dbil_op1 and dbil_val1: filters["dbil_conds"] = filters.get("dbil_conds", []) + [(dbil_op1, dbil_val1)]
+    if dbil_op2 and dbil_val2: filters["dbil_conds"] = filters.get("dbil_conds", []) + [(dbil_op2, dbil_val2)]
+    if ldh_op1 and ldh_val1: filters["ldh_conds"] = filters.get("ldh_conds", []) + [(ldh_op1, ldh_val1)]
+    if ldh_op2 and ldh_val2: filters["ldh_conds"] = filters.get("ldh_conds", []) + [(ldh_op2, ldh_val2)]
+
     exams = hae_db.list_examinations(filters)
     return {"success": True, "examinations": exams, "total": len(exams)}
 
 
 @app.get("/api/bile-leak/patients/{patient_id}/history")
-async def get_patient_history(patient_id: int):
-    """获取患者历史检查记录，用于对比"""
-    exams = hae_db.get_patient_history(patient_id)
+async def get_patient_history(patient_id: str):
+    """获取患者历史检查记录，用于对比（支持内外部患者ID）"""
+    # 如果是纯数字，可能是内部 ID
+    try:
+        internal_id = int(patient_id)
+    except ValueError:
+        internal_id = None
+    # 查找内部 ID（支持外部 patient_id 字符串）
+    if internal_id is None:
+        conn = hae_db.get_conn()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM hae_patients WHERE patient_id=%s LIMIT 1", (patient_id,))
+                row = cur.fetchone()
+                if row:
+                    internal_id = row[0]
+        finally:
+            conn.close()
+    if internal_id is None:
+        raise HTTPException(status_code=404, detail="未找到该患者")
+    exams = hae_db.get_patient_history(internal_id)
     if not exams:
         raise HTTPException(status_code=404, detail="该患者无检查记录")
     return {"success": True, "examinations": exams, "total": len(exams)}
@@ -1142,7 +1173,7 @@ async def get_dicom_preview(exam_id: int, slice_id: int):
                     return FileResponse(fallback["image_path"], media_type="image/png")
                 raise HTTPException(status_code=404, detail="DICOM文件未找到")
 
-            ds = pydicom.dcmread(row["dicom_path"])
+            ds = pydicom.dcmread(row["dicom_path"], force=True)
             arr = ds.pixel_array.astype(float)
 
             # 应用窗宽/窗位（肝胆CT默认窗宽400 HU，窗位40 HU）
