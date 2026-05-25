@@ -20,8 +20,6 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import numpy as np
-import pymysql.cursors as pymysql_cursors
-
 # ── 视觉大模型: Gemini ──
 try:
     from google import genai
@@ -1015,7 +1013,7 @@ async def save_examination(
                             old_path = s["dicom_path"]
                             new_path = str(final_dicom_dir / f"slice_{s['index']:04d}.dcm")
                             cur.execute(
-                                "UPDATE hae_selected_slices SET dicom_path=%s WHERE examination_id=%s AND slice_index=%s",
+                                "UPDATE hae_selected_slices SET dicom_path=? WHERE examination_id=? AND slice_index=?",
                                 (new_path, exam_id, s["index"])
                             )
                 conn.commit()
@@ -1101,7 +1099,7 @@ async def get_patient_history(patient_id: str):
         conn = hae_db.get_conn()
         try:
             with conn.cursor() as cur:
-                cur.execute("SELECT id FROM hae_patients WHERE patient_id=%s LIMIT 1", (patient_id,))
+                cur.execute("SELECT id FROM hae_patients WHERE patient_id=? LIMIT 1", (patient_id,))
                 row = cur.fetchone()
                 if row:
                     internal_id = row[0]
@@ -1129,9 +1127,9 @@ async def get_slice_image(exam_id: int, slice_id: int):
     """获取切片图像"""
     conn = hae_db.get_conn()
     try:
-        with conn.cursor(pymysql_cursors.DictCursor) as cur:
+        with conn.cursor() as cur:
             cur.execute(
-                "SELECT image_path FROM hae_selected_slices WHERE examination_id=%s AND id=%s",
+                "SELECT image_path FROM hae_selected_slices WHERE examination_id=? AND id=?",
                 (exam_id, slice_id)
             )
             row = cur.fetchone()
@@ -1155,16 +1153,16 @@ async def get_dicom_preview(exam_id: int, slice_id: int):
 
     conn = hae_db.get_conn()
     try:
-        with conn.cursor(pymysql_cursors.DictCursor) as cur:
+        with conn.cursor() as cur:
             cur.execute(
-                "SELECT dicom_path FROM hae_selected_slices WHERE examination_id=%s AND id=%s",
+                "SELECT dicom_path FROM hae_selected_slices WHERE examination_id=? AND id=?",
                 (exam_id, slice_id)
             )
             row = cur.fetchone()
             if not row or not row["dicom_path"] or not Path(row["dicom_path"]).exists():
                 # 回退到PNG预览
                 cur.execute(
-                    "SELECT image_path FROM hae_selected_slices WHERE examination_id=%s AND id=%s",
+                    "SELECT image_path FROM hae_selected_slices WHERE examination_id=? AND id=?",
                     (exam_id, slice_id)
                 )
                 fallback = cur.fetchone()
@@ -1206,26 +1204,26 @@ async def download_dicom_zip(exam_id: int):
     """打包下载指定检查的所有精选层面原始DICOM文件"""
     conn = hae_db.get_conn()
     try:
-        with conn.cursor(pymysql_cursors.DictCursor) as cur:
+        with conn.cursor() as cur:
             cur.execute(
                 "SELECT id, slice_index, dicom_path FROM hae_selected_slices "
-                "WHERE examination_id=%s AND dicom_path IS NOT NULL AND dicom_path!='' "
+                "WHERE examination_id=? AND dicom_path IS NOT NULL AND dicom_path!='' "
                 "ORDER BY slice_index",
                 (exam_id,)
             )
-            slices = cur.fetchall()
+            slices = [dict(row) for row in cur.fetchall()]
             if not slices:
                 raise HTTPException(status_code=404, detail="没有可下载的DICOM文件")
 
         # 获取检查信息做文件名
         conn2 = hae_db.get_conn()
         try:
-            with conn2.cursor(pymysql_cursors.DictCursor) as cur2:
+            with conn2.cursor() as cur2:
                 cur2.execute(
                     "SELECT e.id, p.patient_name, e.exam_date FROM hae_examinations e "
-                    "JOIN hae_patients p ON e.patient_id=p.id WHERE e.id=%s", (exam_id,)
+                    "JOIN hae_patients p ON e.patient_id=p.id WHERE e.id=?", (exam_id,)
                 )
-                exam = cur2.fetchone()
+                exam = dict(cur2.fetchone() or {})
         finally:
             conn2.close()
 
@@ -1259,9 +1257,9 @@ async def get_raw_dicom(exam_id: int, slice_id: int):
     """下载原始DICOM文件"""
     conn = hae_db.get_conn()
     try:
-        with conn.cursor(pymysql_cursors.DictCursor) as cur:
+        with conn.cursor() as cur:
             cur.execute(
-                "SELECT dicom_path, slice_index FROM hae_selected_slices WHERE examination_id=%s AND id=%s",
+                "SELECT dicom_path, slice_index FROM hae_selected_slices WHERE examination_id=? AND id=?",
                 (exam_id, slice_id)
             )
             row = cur.fetchone()
